@@ -1,0 +1,73 @@
+# NexCart backend - run with: docker compose up --build
+# Each service is built from its multi-stage Dockerfile (Maven build + slim JRE).
+services:
+  eureka-server:
+    build: ./eureka-server
+    container_name: nexcart-eureka
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  user-service:
+    build: ./user-service
+    container_name: nexcart-user-service
+    ports:
+      - "8081:8081"
+    environment:
+      EUREKA_URI: http://eureka-server:8761/eureka/
+      JWT_SECRET: ${JWT_SECRET:-nexcart-dev-jwt-secret-key-2026!!}
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  order-service:
+    build: ./order-service
+    container_name: nexcart-order-service
+    ports:
+      - "8082:8082"
+    environment:
+      EUREKA_URI: http://eureka-server:8761/eureka/
+      USER_SERVICE_URL: http://user-service:8081
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: nexcart-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_URI: http://eureka-server:8761/eureka/
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
